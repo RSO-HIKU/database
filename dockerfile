@@ -1,15 +1,10 @@
-FROM postgres:16-alpine
+FROM postgis/postgis:16-3.4
 
 # Set environment variables
 ENV POSTGRES_DB=hikudb \
     POSTGRES_USER=hikuuser \
     POSTGRES_PASSWORD=hikupassword \
     PGDATA=/var/lib/postgresql/data/pgdata
-
-# Install additional tools if needed
-RUN apk add --no-cache \
-    postgresql-contrib \
-    curl
 
 # Copy initialization scripts
 COPY init-scripts/ /docker-entrypoint-initdb.d/
