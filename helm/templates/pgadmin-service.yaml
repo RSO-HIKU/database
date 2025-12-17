@@ -1,0 +1,19 @@
+{{- if .Values.pgAdmin.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: pgadmin
+spec:
+  type: NodePort
+  selector:
+    app: pgadmin
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: {{ .Values.pgAdmin.nodePort }}
+      protocol: TCP
+{{- end }}
