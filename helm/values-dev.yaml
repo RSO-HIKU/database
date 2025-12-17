@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+    repository: postgis/postgis
+    tag: "16-3.4"
+    pullPolicy: IfNotPresent
+
+auth:
+    database: hikudb
+    username: hikuuser
+    password: hikupassword
+
+service:
+    type: ClusterIP
+    port: 5432
+
+persistence:
+    enabled: false
+
+resources:
+    requests:
+        memory: "256Mi"
+        cpu: "100m"
+    limits:
+        memory: "512Mi"
+        cpu: "250m"
+
+livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# pgAdmin configuration
+pgAdmin:
+  enabled: true
+  email: admin@hiku.com
+  password: hikupassword
+  nodePort: 30090
