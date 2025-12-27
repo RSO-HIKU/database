@@ -14,8 +14,8 @@ service:
     type: ClusterIP
     port: 5432
 
-persistence:
-    enabled: false
+storage:
+    size: 5Gi
 
 resources:
     requests:
