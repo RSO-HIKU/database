@@ -14,8 +14,8 @@ service:
     type: ClusterIP
     port: 5432
 
-persistence:
-    enabled: false
+storage:
+    size: 5Gi
 
 resources:
     requests:
@@ -39,3 +39,9 @@ pgAdmin:
   email: admin@hiku.com
   password: hikupassword
   nodePort: 30090
+
+flyway:
+  image:
+    repository: database-migrator
+    tag: "dev"
+  table: db_flyway_history
