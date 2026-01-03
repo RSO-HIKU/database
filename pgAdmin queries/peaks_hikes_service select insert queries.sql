@@ -2,9 +2,29 @@ SELECT * FROM peaks_hikes_service.trails;
 
 SELECT * FROM peaks_hikes_service.peaks;
 
+SELECT * FROM peaks_hikes_service.trails_peaks;
 
 DELETE FROM peaks_hikes_service.trails
 WHERE name = 'Vester-Lubnik (grebenska pot)2';
+
+SELECT * FROM peaks_hikes_service.flyway_schema_history;
+
+/*
+DELETE FROM peaks_hikes_service.peaks;
+*/
+/*
+DELETE FROM peaks_hikes_service.trails_peaks;
+*/
+
+INSERT INTO peaks_hikes_service.peaks (name, territory, latitude, longitude, elevation_m)
+VALUES (
+  'Lubnik',
+  'Škofjeloško',
+  46.171040,
+  14.261172,
+  1025
+)
+RETURNING id;
 
 INSERT INTO peaks_hikes_service.trails (
     name,
