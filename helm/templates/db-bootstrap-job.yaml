@@ -3,19 +3,40 @@ kind: Job
 metadata:
   name: {{ include "postgres.fullname" . }}-db-bootstrap
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
 spec:
   ttlSecondsAfterFinished: 60
-  backoffLimit: 1
+  backoffLimit: 3
   template:
     metadata:
       labels:
         {{- include "postgres.selectorLabels" . | nindent 8 }}
     spec:
       restartPolicy: Never
+      
+      {{- if .Values.azure.enabled }}
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "postgres.fullname" . }}-azure-kv
+      {{- end }}
+      
       initContainers:
         - name: wait-for-postgres
           image: postgres:16-alpine
+          {{- if .Values.azure.enabled }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          {{- end }}
           env:
+            {{- if .Values.postgres.enabled }}
+            # Dev: in-cluster PostgreSQL
             - name: PGHOST
               value: {{ include "postgres.fullname" . }}
             - name: PGPORT
@@ -25,12 +46,43 @@ spec:
                 secretKeyRef:
                   name: {{ include "postgres.fullname" . }}-secret
                   key: POSTGRES_USER
-          command: ["sh", "-c", "until pg_isready; do :; done"]
+            {{- else if .Values.azure.enabled }}
+            # Test/Prod: Azure PostgreSQL - read from mounted files
+            - name: PGPORT
+              value: "{{ .Values.azure.port }}"
+            - name: PGSSLMODE
+              value: "{{ .Values.azure.sslmode }}"
+            {{- end }}
+          command:
+            - sh
+            - -c
+            - |
+              {{- if .Values.azure.enabled }}
+              # Read secrets from mounted files
+              export PGHOST=$(cat /mnt/secrets-store/pg-host)
+              export PGUSER=$(cat /mnt/secrets-store/pg-admin-user)
+              export PGPASSWORD=$(cat /mnt/secrets-store/pg-admin-password)
+              {{- end }}
+              echo "Waiting for PostgreSQL at $PGHOST:$PGPORT..."
+              until pg_isready -h $PGHOST -p $PGPORT -U $PGUSER; do
+                echo "PostgreSQL is unavailable - sleeping"
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+      
       containers:
         - name: flyway
           image: "{{ .Values.flyway.image.repository }}:{{ .Values.flyway.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.flyway.image.pullPolicy | default "IfNotPresent" }}
+          {{- if .Values.azure.enabled }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          {{- end }}
           env:
+            {{- if .Values.postgres.enabled }}
+            # Dev: in-cluster PostgreSQL
             - name: FLYWAY_URL
               valueFrom:
                 secretKeyRef:
@@ -46,6 +98,32 @@ spec:
                 secretKeyRef:
                   name: {{ include "postgres.fullname" . }}-secret
                   key: POSTGRES_PASSWORD
+            {{- else if .Values.azure.enabled }}
+            # Flyway config - read from files at runtime
             - name: FLYWAY_TABLE
               value: {{ .Values.flyway.table | quote }}
-          args: ["migrate"] 
+            - name: AZURE_DB_NAME
+              value: {{ .Values.azure.database | quote }}
+            - name: AZURE_DB_PORT
+              value: {{ .Values.azure.port | quote }}
+            - name: AZURE_DB_SSLMODE
+              value: {{ .Values.azure.sslmode | quote }}
+            {{- end }}
+          {{- if .Values.azure.enabled }}
+          command:
+            - sh
+            - -c
+            - |
+              # Read secrets from mounted files
+              export PGHOST=$(cat /mnt/secrets-store/pg-host)
+              export FLYWAY_USER=$(cat /mnt/secrets-store/pg-admin-user)
+              export FLYWAY_PASSWORD=$(cat /mnt/secrets-store/pg-admin-password)
+              export FLYWAY_URL="jdbc:postgresql://${PGHOST}:${AZURE_DB_PORT}/${AZURE_DB_NAME}?sslmode=${AZURE_DB_SSLMODE}"
+              
+              echo "Running Flyway migrations..."
+              echo "URL: jdbc:postgresql://${PGHOST}:${AZURE_DB_PORT}/${AZURE_DB_NAME}"
+              
+              flyway -baselineOnMigrate=true -baselineVersion=0 migrate
+          {{- else }}
+          args: ["-baselineOnMigrate=true", "-baselineVersion=0", "migrate"]
+          {{- end }}
